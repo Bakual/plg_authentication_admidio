@@ -10,7 +10,7 @@
 defined('_JEXEC') or die;
 
 use Joomla\CMS\Authentication\Authentication;
-use Joomla\CMS\Helper\AuthenticationHelper;
+use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
 
 /**
@@ -23,9 +23,9 @@ class PlgAuthenticationAdmidio extends JPlugin
 	/**
 	 * This method should handle any authentication and report back to the subject
 	 *
-	 * @param   array   $credentials  Array holding the user credentials
-	 * @param   array   $options      Array of extra options
-	 * @param   object  &$response    Authentication response object
+	 * @param array    $credentials Array holding the user credentials
+	 * @param array    $options     Array of extra options
+	 * @param object  &$response    Authentication response object
 	 *
 	 * @return  void
 	 *
@@ -56,7 +56,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 
 		$db    = JDatabaseDriver::getInstance($options);
 		$query = $db->getQuery(true)
-			->select('`usr_id`, `usr_password`')
+			->select('usr_id, usr_password')
 			->from('#__users')
 			->where('`usr_login_name` = ' . $db->quote($credentials['username']));
 
@@ -70,7 +70,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 			if ($match === true)
 			{
 				$query = $db->getQuery(true)
-					->select('`usd_usf_id`, `usd_value`')
+					->select('usd_usf_id, usd_value')
 					->from('#__user_data')
 					->where('`usd_usr_id` = ' . $result->usr_id);
 
@@ -87,7 +87,6 @@ class PlgAuthenticationAdmidio extends JPlugin
 				}
 
 				$response->email    = $userData[12]->usd_value;
-
 				$response->fullname = $userData[2]->usd_value . ' ' . $userData[1]->usd_value;
 
 				$response->status        = Authentication::STATUS_SUCCESS;
@@ -110,5 +109,57 @@ class PlgAuthenticationAdmidio extends JPlugin
 			$response->status        = Authentication::STATUS_FAILURE;
 			$response->error_message = Text::_('JGLOBAL_AUTH_NO_USER');
 		}
+	}
+
+	/**
+	 * Lookup and assign usergroups
+	 *
+	 * @param array $options Array holding options
+	 *
+	 * @return  boolean  True on success
+	 *
+	 * @since   1.0
+	 */
+	public function onUserAfterLogin($options)
+	{
+		if (!isset($options['responseType']) || $options['responseType'] !== 'Admidio')
+		{
+			return true;
+		}
+
+		// Get a database object
+		$options = array(
+			'driver'   => 'mysql',
+			'host'     => 'localhost',
+			'user'     => $this->params->get('user'),
+			'password' => $this->params->get('password'),
+			'database' => $this->params->get('database'),
+			'prefix'   => 'adm_',
+		);
+
+		$db    = JDatabaseDriver::getInstance($options);
+		$query = $db->getQuery(true)
+			->select('rol_name')
+			->from('#__members')
+			->join('INNER', '`#__roles` ON `mem_rol_id` = `rol_id`')
+			->join('INNER', '`#__users` ON `mem_usr_id` = `usr_id`')
+			->where('`usr_login_name` = ' . $options['user']->username);
+
+		$db->setQuery($query);
+		$groupsAdmidio = $db->loadColumn();
+
+		// Get the user groups from the database.
+		$db    = JFactory::getDbo();
+		$query = $db->getQuery(true)
+			->select('id')
+			->from('#__usergroups')
+			->where('`title` IN (' . implode(',', $groupsAdmidio) . ')');
+
+		$db->setQuery($query);
+		$groups = $db->loadColumn();
+
+		JUserHelper::setUserGroups(Factory::getUser()->id, $groups);
+
+		return true;
 	}
 }
