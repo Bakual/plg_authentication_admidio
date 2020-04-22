@@ -45,7 +45,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 		}
 
 		// Get a database object
-		$options = array(
+		$dboptions = array(
 			'driver'   => 'mysql',
 			'host'     => 'localhost',
 			'user'     => $this->params->get('user'),
@@ -54,7 +54,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 			'prefix'   => 'adm_',
 		);
 
-		$db    = JDatabaseDriver::getInstance($options);
+		$db    = JDatabaseDriver::getInstance($dboptions);
 		$query = $db->getQuery(true)
 			->select('usr_id, usr_password')
 			->from('#__users')
@@ -128,7 +128,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 		}
 
 		// Get a database object
-		$options = array(
+		$dboptions = array(
 			'driver'   => 'mysql',
 			'host'     => 'localhost',
 			'user'     => $this->params->get('user'),
@@ -137,13 +137,13 @@ class PlgAuthenticationAdmidio extends JPlugin
 			'prefix'   => 'adm_',
 		);
 
-		$db    = JDatabaseDriver::getInstance($options);
+		$db    = JDatabaseDriver::getInstance($dboptions);
 		$query = $db->getQuery(true)
 			->select('rol_name')
 			->from('#__members')
 			->join('INNER', '`#__roles` ON `mem_rol_id` = `rol_id`')
 			->join('INNER', '`#__users` ON `mem_usr_id` = `usr_id`')
-			->where('`usr_login_name` = ' . $options['user']->username);
+			->where('`usr_login_name` = "' . $options['user']->username . '"');
 
 		$db->setQuery($query);
 		$groupsAdmidio = $db->loadColumn();
@@ -153,7 +153,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 		$query = $db->getQuery(true)
 			->select('id')
 			->from('#__usergroups')
-			->where('`title` IN (' . implode(',', $groupsAdmidio) . ')');
+			->where('`title` IN ("' . implode('","', $groupsAdmidio) . '")');
 
 		$db->setQuery($query);
 		$groups = $db->loadColumn();
