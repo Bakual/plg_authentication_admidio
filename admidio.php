@@ -12,6 +12,8 @@ defined('_JEXEC') or die;
 use Joomla\CMS\Authentication\Authentication;
 use Joomla\CMS\Factory;
 use Joomla\CMS\Language\Text;
+use Joomla\CMS\User\User;
+use Joomla\CMS\User\UserHelper;
 
 /**
  * Admidio Authentication plugin
@@ -112,19 +114,45 @@ class PlgAuthenticationAdmidio extends JPlugin
 	}
 
 	/**
-	 * Lookup and assign usergroups
+	 * This method should handle any login logic and report back to the subject
 	 *
-	 * @param array $options Array holding options
+	 * @param   array  $user     Holds the user data
+	 * @param   array  $options  Array holding options (remember, autoregister, group)
 	 *
 	 * @return  boolean  True on success
 	 *
-	 * @since   1.0
+	 * @since   1.5
 	 */
-	public function onUserAfterLogin($options)
+	public function onUserLogin($user, $options = array())
 	{
-		if (!isset($options['responseType']) || $options['responseType'] !== 'Admidio')
+		if (!isset($user['type']) || $user['type'] !== 'Admidio')
 		{
 			return true;
+		}
+
+		$instance = User::getInstance();
+		$id = (int) UserHelper::getUserId($user['username']);
+
+		// Create User if it doesn't exist.
+		if (!$id)
+		{
+			$instance->id             = 0;
+			$instance->name           = $user['fullname'];
+			$instance->username       = $user['username'];
+			$instance->password_clear = $user['password'];
+			$instance->email          = $user['email'];
+			$instance->groups = array();
+
+			if (!$instance->save())
+			{
+				JLog::add('Error in autoregistration for user ' . $user['username'] . '.', JLog::WARNING, 'error');
+
+				return false;
+			}
+			else
+			{
+				$id = $instance->id;
+			}
 		}
 
 		// Get a database object
@@ -143,7 +171,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 			->from('#__members')
 			->join('INNER', '`#__roles` ON `mem_rol_id` = `rol_id`')
 			->join('INNER', '`#__users` ON `mem_usr_id` = `usr_id`')
-			->where('`usr_login_name` = "' . $options['user']->username . '"');
+			->where('`usr_login_name` = "' . $user['username'] . '"');
 
 		$db->setQuery($query);
 		$groupsAdmidio = $db->loadColumn();
@@ -158,7 +186,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 		$db->setQuery($query);
 		$groups = $db->loadColumn();
 
-		JUserHelper::setUserGroups(Factory::getUser()->id, $groups);
+		UserHelper::setUserGroups($id, $groups);
 
 		return true;
 	}
