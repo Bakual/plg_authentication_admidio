@@ -10,7 +10,7 @@
 defined('_JEXEC') or die;
 
 use Joomla\CMS\Authentication\Authentication;
-use Joomla\CMS\Factory;
+use Joomla\CMS\Authentication\AuthenticationResponse;
 use Joomla\CMS\Language\Text;
 use Joomla\CMS\User\User;
 use Joomla\CMS\User\UserHelper;
@@ -93,6 +93,8 @@ class PlgAuthenticationAdmidio extends JPlugin
 
 				$response->status        = Authentication::STATUS_SUCCESS;
 				$response->error_message = '';
+
+				$this->createUser($credentials, $response);
 			}
 			else
 			{
@@ -114,45 +116,27 @@ class PlgAuthenticationAdmidio extends JPlugin
 	}
 
 	/**
-	 * This method should handle any login logic and report back to the subject
+	 * Create the user if it doesn't exist yet or update the groups
 	 *
-	 * @param   array  $user     Holds the user data
-	 * @param   array  $options  Array holding options (remember, autoregister, group)
+	 * @param array                  $credentials
+	 * @param AuthenticationResponse $user Holds the user data
 	 *
 	 * @return  boolean  True on success
 	 *
-	 * @since   1.5
+	 * @since   1.0
 	 */
-	public function onUserLogin($user, $options = array())
+	private function createUser($credentials, $user)
 	{
-		if (!isset($user['type']) || $user['type'] !== 'Admidio')
-		{
-			return true;
-		}
-
-		$instance = User::getInstance();
-		$id = (int) UserHelper::getUserId($user['username']);
+		$id       = (int) UserHelper::getUserId($credentials['username']);
+		$instance = User::getInstance($id);
 
 		// Create User if it doesn't exist.
 		if (!$id)
 		{
-			$instance->id             = 0;
-			$instance->name           = $user['fullname'];
-			$instance->username       = $user['username'];
-			$instance->password_clear = $user['password'];
-			$instance->email          = $user['email'];
-			$instance->groups = array();
-
-			if (!$instance->save())
-			{
-				JLog::add('Error in autoregistration for user ' . $user['username'] . '.', JLog::WARNING, 'error');
-
-				return false;
-			}
-			else
-			{
-				$id = $instance->id;
-			}
+			$instance->name           = $user->fullname;
+			$instance->username       = $credentials['username'];
+			$instance->password_clear = $credentials['password'];
+			$instance->email          = $user->email;
 		}
 
 		// Get a database object
@@ -171,7 +155,7 @@ class PlgAuthenticationAdmidio extends JPlugin
 			->from('#__members')
 			->join('INNER', '`#__roles` ON `mem_rol_id` = `rol_id`')
 			->join('INNER', '`#__users` ON `mem_usr_id` = `usr_id`')
-			->where('`usr_login_name` = "' . $user['username'] . '"');
+			->where('`usr_login_name` = "' . $credentials['username'] . '"');
 
 		$db->setQuery($query);
 		$groupsAdmidio = $db->loadColumn();
@@ -184,9 +168,15 @@ class PlgAuthenticationAdmidio extends JPlugin
 			->where('`title` IN ("' . implode('","', $groupsAdmidio) . '")');
 
 		$db->setQuery($query);
-		$groups = $db->loadColumn();
 
-		UserHelper::setUserGroups($id, $groups);
+		$instance->groups = $db->loadColumn();
+
+		if (!$instance->save())
+		{
+			JLog::add('Error in autoregistration for user ' . $credentials['username'] . '.', JLog::WARNING, 'error');
+
+			return false;
+		}
 
 		return true;
 	}
